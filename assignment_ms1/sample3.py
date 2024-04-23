@@ -17,108 +17,132 @@ from email.mime.base import MIMEBase
 from email import encoders
 
 
-# Create directories if they don't exist
+# Get the directory path where the script is located
+script_directory = os.path.dirname(os.path.realpath(__file__))
+
+# Create directories if they don't exist in the script's directory
 directories = ['input', 'processing', 'completed', 'failed', 'deleted', 'reports', 'logs']
 for directory in directories:
-    if not os.path.exists(directory):
-        os.makedirs(directory)
+    directory_path = os.path.join(script_directory, directory)
+    if not os.path.exists(directory_path):
+        os.makedirs(directory_path)
 
 # Set up logging
 logging.basicConfig(filename='logs/converter.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Function to create the database and tables if they don't exist
 def create_database(database_name):
-    conn = sqlite3.connect(database_name)
-    cursor = conn.cursor()
+    try:
+        conn = sqlite3.connect(database_name)
+        cursor = conn.cursor()
 
-    # Create SourceFile table
-    cursor.execute('''CREATE TABLE IF NOT EXISTS SourceFile (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        source_file_name TEXT UNIQUE,
-                        local_file_path TEXT,
-                        file_size INTEGER,
-                        status TEXT,
-                        created_date TEXT,
-                        updated_date TEXT
-                    )''')
-    logging.info("Table SourceFile created in database.")
-    # Create ProcessedFiles table
-    cursor.execute('''CREATE TABLE IF NOT EXISTS ProcessedFiles (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        local_file_path TEXT UNIQUE,
-                        source_file_name TEXT UNIQUE,
-                        status TEXT,
-                        created_date TEXT,
-                        updated_date TEXT
-                    )''')
-    
-    logging.info("Table ProcessedFiles created in database.")
-    conn.commit()
-    conn.close()
+        # Create SourceFile table
+        cursor.execute('''CREATE TABLE IF NOT EXISTS SourceFile (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            source_file_name TEXT UNIQUE,
+                            local_file_path TEXT,
+                            file_size INTEGER,
+                            status TEXT,
+                            created_date TEXT,
+                            updated_date TEXT
+                        )''')
+        logging.info("Table SourceFile created in database.")
+        # Create ProcessedFiles table
+        cursor.execute('''CREATE TABLE IF NOT EXISTS ProcessedFiles (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            local_file_path TEXT UNIQUE,
+                            source_file_name TEXT UNIQUE,
+                            status TEXT,
+                            created_date TEXT,
+                            updated_date TEXT
+                        )''')
+        
+        logging.info("Table ProcessedFiles created in database.")
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logging.error(f"Error creating database: {e}")
+        raise e
 
 # Function to insert data into SourceFile table
 def insert_source_file(database_name, source_file_name, local_file_path, file_size, status):
-    conn = sqlite3.connect(database_name)
-    cursor = conn.cursor()
+    try:
+        conn = sqlite3.connect(database_name)
+        cursor = conn.cursor()
 
-    current_datetime = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+        current_datetime = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
 
-    cursor.execute('''INSERT OR IGNORE INTO SourceFile 
-                        (source_file_name, local_file_path, file_size, status, created_date, updated_date) 
-                        VALUES (?, ?, ?, ?, ?, ?)''',
-                    (source_file_name, local_file_path, file_size, status, current_datetime, current_datetime))
-    if True:
+        cursor.execute('''INSERT OR IGNORE INTO SourceFile 
+                            (source_file_name, local_file_path, file_size, status, created_date, updated_date) 
+                            VALUES (?, ?, ?, ?, ?, ?)''',
+                        (source_file_name, local_file_path, file_size, status, current_datetime, current_datetime))
         logging.info("Downloaded files successsfully inserted in SourceFile table")
-        
-    conn.commit()
-    conn.close()
+            
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logging.error(f"Error inserting source file into database: {e}")
+        raise e
 
 # Function to insert data into ProcessedFiles table
 def insert_processed_file(database_name, local_file_path, source_file_name, status):
-    conn = sqlite3.connect(database_name)
-    cursor = conn.cursor()
+    try:
+        conn = sqlite3.connect(database_name)
+        cursor = conn.cursor()
 
-    current_datetime = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+        current_datetime = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
 
-    cursor.execute('''INSERT OR IGNORE INTO ProcessedFiles 
-                        (local_file_path, source_file_name, status, created_date, updated_date) 
-                        VALUES (?, ?, ?, ?, ?)''',
-                    (local_file_path, source_file_name, status, current_datetime, current_datetime))
-    
-    logging.info("Processed Files successfully inserted into ProcessedFiles table")
-    conn.commit()
-    conn.close()
+        cursor.execute('''INSERT OR IGNORE INTO ProcessedFiles 
+                            (local_file_path, source_file_name, status, created_date, updated_date) 
+                            VALUES (?, ?, ?, ?, ?)''',
+                        (local_file_path, source_file_name, status, current_datetime, current_datetime))
+        logging.info("Processed Files successfully inserted into ProcessedFiles table")
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logging.error(f"Error inserting processed files into database: {e}")
+        raise e
 
 # Function to update file status in SourceFile table
 def update_file_status(database_name, file_name, status):
-    conn = sqlite3.connect(database_name)
-    cursor = conn.cursor()
+    try:
+        conn = sqlite3.connect(database_name)
+        cursor = conn.cursor()
 
-    cursor.execute('''UPDATE SourceFile SET status = ? WHERE source_file_name = ?''', (status, file_name))
-    logging.info("SourceFile table files status updated to completed/failed respectively")
-    conn.commit()
-    conn.close()
+        cursor.execute('''UPDATE SourceFile SET status = ? WHERE source_file_name = ?''', (status, file_name))
+        logging.info("SourceFile table files status updated respectively")
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logging.error(f"Error updating SourceFile into database: {e}")
+        raise e
 
 # Function to view database tables
 def view_database(database_name, table_name):
+     
     conn = sqlite3.connect(database_name)
     cursor = conn.cursor()
-
     cursor.execute(f'SELECT * FROM {table_name}')
     data = cursor.fetchall()
-
     conn.close()
-    
+        
     print(f"{table_name} table:")
     if data:
         headers = [description[0] for description in cursor.description]
         print(tabulate(data, headers=headers, tablefmt="grid"))
+        logging.info("Data fetched from database...")
     else:
         print(f"No data found in {table_name} table.")
+        logging.error(f"No data found in {table_name} table.")
 
 def print_database(database_name, table_name):
-    view_database(database_name, table_name)
-    print()
+    try:
+        view_database(database_name, table_name)
+        print()
+        logging.info(f"Printing database {database_name}...")
+    except Exception as e:
+        logging.error(f"Error printing database {database_name}: {e}")
+        raise e
 
 
 # SSH credentials and server details
@@ -129,20 +153,29 @@ password = 'trellissoft@123'
 remote_path = '/home/trellissoft/temp_files/'
 
 # Connect to the remote server
-ssh = paramiko.SSHClient()
-ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-ssh.connect(hostname, port, username, password)
+try:
+    ssh = paramiko.SSHClient()
+    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    ssh.connect(hostname, port, username, password)
+except Exception as e:
+        logging.error(f"Error connecting to server")
+        raise e
 
 # Function to download folders from remote server
 def download_folders_from_remote(sftp, remote_path, local_input_folder, database_name):
     # List files and directories in the remote path
-    files = sftp.listdir_attr(remote_path)
+    try:
+        files = sftp.listdir_attr(remote_path)
+    except Exception as e:
+        logging.error(f"Error listing files in remote path '{remote_path}': {str(e)}")
+        return
     
     for item in files:
         remote_item_path = os.path.join(remote_path, item.filename)
         if stat.S_ISDIR(item.st_mode):  # If it's a directory
             download_folder(sftp, remote_item_path, local_input_folder, database_name)
-    logging.info("Folders downloaded successfully from remote server!")
+            logging.info("Folders downloaded successfully from remote server!")
+
     
 def download_file(sftp, remote_file_path, local_directory_path, database_name):
     # Get the file name
@@ -226,23 +259,30 @@ def convert_wav_to_mp3(input_folder, processing_folder, completed_folder, failed
                 # Determine the main folder name (parent folder of the input file)
                 main_folder_name = os.path.basename(root)
 
+                logging.info(f"Processing WAV file: {file_name}")
+                
+                current_datetime=datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+                
                 # Load the wav file
                 wav_file_path = os.path.join(root, file_name)
                 try:
                     sound = AudioSegment.from_wav(wav_file_path)
-                except CouldntDecodeError:
-                    # Move the file to the failed folder
+                except Exception as e:
+                    # Log the error and move the file to the failed folder
+                    logging.error(f"Error decoding WAV file {wav_file_path}: {e}")
                     failed_main_folder = os.path.join(failed_folder, main_folder_name)
                     os.makedirs(failed_main_folder, exist_ok=True)
                     failed_file_folder = os.path.join(failed_main_folder, file_name[:-4])
                     os.makedirs(failed_file_folder, exist_ok=True)
                     os.rename(wav_file_path, os.path.join(failed_file_folder, file_name))
+                    logging.error(f"Moving WAV file {wav_file_path} to failed folder.")
+                    
                     
                     # Update status to 'failed' in the database
                     cursor.execute("UPDATE SourceFile SET status = 'failed' WHERE source_file_name = ?", (file_name,))
                     conn.commit()
-                    logging.error("File {file_name} couldn't be decoded")
-                    continue  # Skip further processing for this file
+                    logging.error(f"Updating {file_name} status to 'failed' in the database")
+                    continue  # Skip further processing for this file 
 
                 # Determine the destination folder based on successful processing
                 destination_folder = os.path.join(processing_folder, main_folder_name)
@@ -256,53 +296,77 @@ def convert_wav_to_mp3(input_folder, processing_folder, completed_folder, failed
                 # Create a subfolder inside the main folder for original files
                 original_folder = os.path.join(destination_folder, filename_without_extension, "original")
                 os.makedirs(original_folder, exist_ok=True)
-                
 
-                # Move the original wav file to the original folder
+                # Move the original wav file to the completed/original folder
                 original_file_path = os.path.join(original_folder, file_name)
-                os.rename(wav_file_path, original_file_path)
-                logging.info("Original file {file_name} moved to completed folder.")
+                try:
+                    os.rename(wav_file_path, original_file_path)
+                    logging.info(f"Original file {file_name} moved to completed/original.")
+                except Exception as e:
+                    logging.error(f"Error moving {file_name} to completed/original: {e}")
 
                 # Insert original file into ProcessedFiles table
-                insert_processed_file(database_name, original_file_path, file_name, 'processed')
-                logging.info(f"Original file {file_name} inserted to database(ProcessedFiles)")
-                
+                try:
+                    cursor.execute("INSERT INTO ProcessedFiles (local_file_path, source_file_name, status, created_date, updated_date) VALUES (?, ?, ?, ?, ?)", 
+                                   (original_file_path, file_name, 'processed',current_datetime, current_datetime))
+                    conn.commit()
+                    logging.info(f"Original file {file_name} inserted to database(ProcessedFiles)")
+                except Exception as e:
+                    logging.error(f"Error inserting original {file_name} into database: {e}")
+
                 # Create a subfolder inside the main folder for converted files
                 converted_folder = os.path.join(destination_folder, filename_without_extension, "converted")
                 os.makedirs(converted_folder, exist_ok=True)
-
-                # Convert to mp3
                 mp3_file_name = f"{filename_without_extension}.mp3"
                 mp3_file_path = os.path.join(converted_folder, mp3_file_name)
-                sound.export(mp3_file_path, format="mp3")
-                logging.info("Converted file {file_name} moved to completed folder.")
-                
+                try:
+                    # Convert to mp3
+                    sound.export(mp3_file_path, format="mp3")
+                    logging.info(f"Converted file {mp3_file_name} moved to completed/converted.")
+                except Exception as e:
+                    logging.error(f"Error moving converted {mp3_file_name} to completed/converted: {e}")
+
                 # Insert converted file into ProcessedFiles table
-                insert_processed_file(database_name, mp3_file_path, mp3_file_name, 'processed')
-                logging.info(f"Converted file {mp3_file_name} inserted to database(ProcessedFiles)")
-                
+                try:
+                    cursor.execute("INSERT INTO ProcessedFiles (local_file_path, source_file_name, status, created_date, updated_date) VALUES (?, ?, ?, ?, ?)", 
+                                   (mp3_file_path, mp3_file_name, 'processed', current_datetime,current_datetime))
+                    conn.commit()
+                    logging.info(f"Converted file {mp3_file_name} inserted to database(ProcessedFiles)")
+                except Exception as e:
+                    logging.error(f"Error inserting converted {mp3_file_name} into database: {e}")
+
                 # Create a subfolder inside the main folder for chunks
                 chunks_folder = os.path.join(destination_folder, filename_without_extension, "chunks")
                 os.makedirs(chunks_folder, exist_ok=True)
 
                 # Split the mp3 file into chunks
-                for i in range(0, len(sound), 10000):  # Split every 10 seconds
-                    start_time = i // 1000  # Convert milliseconds to seconds
-                    end_time = (i + 10000) // 1000
-                    chunk_file_name = f"{filename_without_extension}_{start_time}-{end_time}.mp3"
-                    chunk_file_path = os.path.join(chunks_folder, chunk_file_name)
-                    chunk = sound[i:i + 10000]
-                    chunk.export(chunk_file_path, format="mp3")
-                    logging.info(f"Moving chunk {chunk} to completed folder")
-
-                    # Insert chunk file into ProcessedFiles table
-                    insert_processed_file(database_name, chunk_file_path, chunk_file_name, 'processed')
-                    logging.info(f"Chunk file {mp3_file_name} inserted into database(ProcessedFiles)")
+                try:
+                    for i in range(0, len(sound), 10000):  # Split every 10 seconds
+                        start_time = i // 1000  # Convert milliseconds to seconds
+                        end_time = (i + 10000) // 1000
+                        chunk_file_name = f"{filename_without_extension}_{start_time}-{end_time}.mp3"
+                        chunk_file_path = os.path.join(chunks_folder, chunk_file_name)
+                        chunk = sound[i:i + 10000]
+                        chunk.export(chunk_file_path, format="mp3")
+                        logging.info(f"Moving chunk {chunk_file_name} to completed/chunks")
+                        # Insert chunk file into ProcessedFiles table
+                        try:
+                            cursor.execute("INSERT INTO ProcessedFiles (local_file_path, source_file_name, status, created_date, updated_date) VALUES (?, ?, ?, ?, ?)", 
+                                           (chunk_file_path, chunk_file_name, 'processed', current_datetime, current_datetime))
+                            conn.commit()
+                            logging.info(f"Chunk file {chunk_file_name} inserted into database(ProcessedFiles)")
+                        except Exception as e:
+                            logging.error(f"Error inserting chunk {chunk_file_name} into database: {e}")
+                except Exception as e:
+                    logging.error(f"Error splitting mp3 file into chunks: {e}")
 
                 # Update status to 'completed' in the database for the original file
-                cursor.execute("UPDATE SourceFile SET status = 'completed' WHERE source_file_name = ?", (file_name,))
-                logging.info("Status of original file set to completed after the file is processed successfully")
-                conn.commit()
+                try:
+                    cursor.execute("UPDATE SourceFile SET status = 'completed' WHERE source_file_name = ?", (file_name,))
+                    logging.info("Status of original file set to completed after the file is processed successfully")
+                    conn.commit()
+                except Exception as e:
+                    logging.error(f"Error updating status of original file to 'completed' after the file is processed: {e}")
 
     # Close the database connection
     conn.close()
@@ -480,7 +544,7 @@ def main():
     # Email details
     sender_email = 'sakshibhati1407@gmail.com'
     sender_password = 'hkcb saoy ymfs wimj'
-    receiver_email = 'bsakshi@trellissoft.ai'
+    receiver_email = 'pjignesh@trellissoft.ai'
     cc_email = 'bsakshi@trellissoft.ai'
     subject = 'Daily Status Report'
 
