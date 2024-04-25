@@ -104,18 +104,6 @@ def insert_processed_file(database_name, local_file_path, source_file_name, stat
         logging.error(f"Error inserting processed files into database: {e}")
         raise e
 
-# Function to update file status in SourceFile table
-def update_file_status(database_name, file_name, status):
-    try:
-        conn = sqlite3.connect(database_name)
-        cursor = conn.cursor()
-
-        cursor.execute('''UPDATE SourceFile SET status = ? WHERE source_file_name = ?''', (status, file_name))
-        logging.info("SourceFile table files status updated respectively")
-        conn.commit()
-        conn.close()
-    except Exception as e:
-        logging.error(f"Error updating SourceFile into database: {e}")
 
 # Function to view database tables
 def view_database(database_name, table_name):
