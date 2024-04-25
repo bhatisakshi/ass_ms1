@@ -65,45 +65,6 @@ def create_database(database_name):
         logging.error(f"Error creating database: {e}")
         raise e
 
-# Function to insert data into SourceFile table
-def insert_source_file(database_name, source_file_name, local_file_path, file_size, status):
-    try:
-        conn = sqlite3.connect(database_name)
-        cursor = conn.cursor()
-
-        current_datetime = datetime.now().strftime("%y-%m-%d")
-
-        cursor.execute('''INSERT OR IGNORE INTO SourceFile 
-                            (source_file_name, local_file_path, file_size, status, created_date, updated_date) 
-                            VALUES (?, ?, ?, ?, ?, ?)''',
-                        (source_file_name, local_file_path, file_size, status, current_datetime, current_datetime))
-        logging.info("Downloaded files successsfully inserted in SourceFile table")
-            
-        conn.commit()
-        conn.close()
-    except Exception as e:
-        logging.error(f"Error inserting source file into database: {e}")
-        raise e
-
-# Function to insert data into ProcessedFiles table
-def insert_processed_file(database_name, local_file_path, source_file_name, status):
-    try:
-        conn = sqlite3.connect(database_name)
-        cursor = conn.cursor()
-
-        current_datetime = datetime.now().strftime("%y-%m-%d")
-
-        cursor.execute('''INSERT OR IGNORE INTO ProcessedFiles 
-                            (local_file_path, source_file_name, status, created_date, updated_date) 
-                            VALUES (?, ?, ?, ?, ?)''',
-                        (local_file_path, source_file_name, status, current_datetime, current_datetime))
-        logging.info("Processed Files successfully inserted into ProcessedFiles table")
-        conn.commit()
-        conn.close()
-    except Exception as e:
-        logging.error(f"Error inserting processed files into database: {e}")
-        raise e
-
 
 # Function to view database tables
 def view_database(database_name, table_name):
@@ -196,9 +157,9 @@ def download_file(sftp, remote_file_path, local_directory_path, database_name):
                 sftp.get(remote_file_path, local_file_path)
                 
                 logging.info(f"Downloaded '{file_name}' from remote server to local directory.")
-                
-                # Insert file information into the database
-                insert_source_file(database_name, file_name, local_file_path, os.path.getsize(local_file_path), 'pending')
+                created_date=datetime.now().strftime("%y-%m-%d")
+                cursor.execute("INSERT INTO SourceFile (database_name, source_file_name, local_file_path, file_size, status, created_date) VALUES (?, ?, ?, ?, ?, ?)", 
+                                           (database_name, file_name, local_file_path, os.path.getsize(local_file_path), 'pending', created_date))
                 return 1
                 
     except Exception as e:
@@ -282,9 +243,9 @@ def convert_wav_to_mp3(input_folder, processing_folder, completed_folder, failed
                     os.rename(wav_file_path, os.path.join(failed_file_folder, file_name))
                     logging.error(f"Moving WAV file {wav_file_path} to failed folder.")
                     
-                    
-                    # Update status to 'failed' in the database
-                    cursor.execute("UPDATE SourceFile SET status = 'failed' WHERE source_file_name = ?", (file_name,))
+                    updated_date=datetime.now().strftime("%y-%m-%d")
+                    # Update status to 'failed'  and date in the database
+                    cursor.execute("UPDATE SourceFile SET status = 'failed', updated_date=? WHERE source_file_name = ?", (file_name, updated_date,))
                     conn.commit()
                     logging.error(f"Updating {file_name} status to 'failed' in the database")
                     continue  # Skip further processing for this file 
@@ -312,6 +273,7 @@ def convert_wav_to_mp3(input_folder, processing_folder, completed_folder, failed
 
                 # Insert original file into ProcessedFiles table
                 try:
+                    created_date, updated_date= datetime.now().strftime("%y-%m-%d")
                     cursor.execute("INSERT INTO ProcessedFiles (local_file_path, source_file_name, status, created_date, updated_date) VALUES (?, ?, ?, ?, ?)", 
                                    (original_file_path, file_name, 'processed',current_datetime, current_datetime))
                     conn.commit()
@@ -333,8 +295,9 @@ def convert_wav_to_mp3(input_folder, processing_folder, completed_folder, failed
 
                 # Insert converted file into ProcessedFiles table
                 try:
+                    created_date, updated_date= datetime.now().strftime("%y-%m-%d")
                     cursor.execute("INSERT INTO ProcessedFiles (local_file_path, source_file_name, status, created_date, updated_date) VALUES (?, ?, ?, ?, ?)", 
-                                   (mp3_file_path, mp3_file_name, 'processed', current_datetime,current_datetime))
+                                   (mp3_file_path, mp3_file_name, 'processed', created_date, updated_date))
                     conn.commit()
                     logging.info(f"Converted file {mp3_file_name} inserted to database(ProcessedFiles)")
                 except Exception as e:
@@ -356,8 +319,9 @@ def convert_wav_to_mp3(input_folder, processing_folder, completed_folder, failed
                         logging.info(f"Moving chunk {chunk_file_name} to completed/chunks")
                         # Insert chunk file into ProcessedFiles table
                         try:
+                            created_date, updated_date= datetime.now().strftime("%y-%m-%d")
                             cursor.execute("INSERT INTO ProcessedFiles (local_file_path, source_file_name, status, created_date, updated_date) VALUES (?, ?, ?, ?, ?)", 
-                                           (chunk_file_path, chunk_file_name, 'processed', current_datetime, current_datetime))
+                                           (chunk_file_path, chunk_file_name, 'processed', created_date, updated_date))
                             conn.commit()
                             logging.info(f"Chunk file {chunk_file_name} inserted into database(ProcessedFiles)")
                         except Exception as e:
@@ -365,9 +329,10 @@ def convert_wav_to_mp3(input_folder, processing_folder, completed_folder, failed
                 except Exception as e:
                     logging.error(f"Error splitting mp3 file into chunks: {e}")
 
-                # Update status to 'completed' in the database for the original file
+                # Update status to 'completed' and date in the database for the original file
                 try:
-                    cursor.execute("UPDATE SourceFile SET status = 'completed' WHERE source_file_name = ?", (file_name,))
+                    updated_date=datetime.now().strftime("%y-%m-%d")
+                    cursor.execute("UPDATE SourceFile SET status = 'completed',updated_date=? WHERE source_file_name = ?", (file_name, updated_date, ))
                     logging.info("Status of original file set to completed after the file is processed successfully")
                     conn.commit()
                 except Exception as e:
