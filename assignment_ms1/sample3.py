@@ -105,11 +105,6 @@ password = base64_decode(os.environ.get('SSH_PASSWORD'))
 port = int(base64_decode(os.environ.get('SSH_PORT', '22')))
 remote_path="/home/trellissoft/temp_files/"
 
-# export SSH_HOST="MTkyLjE2OC4xLjYy" 
-# && export SSH_PORT="MjI=" 
-# && export SSH_USERNAME="dHJlbGxpc3NvZnQ=" 
-# && export SSH_PASSWORD="dHJlbGxpc3NvZnRAMTIz"
-
 # Connect to the remote server
 try:
     ssh = paramiko.SSHClient()
@@ -505,11 +500,6 @@ def main():
     receiver_email = base64_decode(os.environ.get('RECIEVER_EMAIL'))
     cc_email = base64_decode(os.environ.get('CC_EMAIL'))
     subject = 'Daily Status Report'
-    
-    # && export SENDER_EMAIL="c2Frc2hpYmhhdGkxNDA3QGdtYWlsLmNvbQ==" 
-    # && export SENDER_PASSWORD="aGtjYiBzYW95IHltZnMgd2ltag==" 
-    # && export RECIEVER_EMAIL="cGppZ25lc2hAdHJlbGxpc3NvZnQuYWk=" 
-    # && export CC_EMAIL="YnNha3NoaUB0cmVsbGlzc29mdC5haQ=="
 
     # Create reports folder if it doesn't exist
     report_folder = 'reports'
