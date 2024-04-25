@@ -1,20 +1,21 @@
-import paramiko
 import os
+import sys
+import stat
+import time
 import shutil
+import base64
 import sqlite3
+import smtplib
+import logging
+import paramiko
+import pandas as pd
+from email import encoders
+from datetime import datetime
 from tabulate import tabulate
 from pydub import AudioSegment
-from pydub.exceptions import CouldntDecodeError
-from datetime import datetime, timedelta
-import time
-import logging
-import stat
-import pandas as pd
-import smtplib
-from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
-from email import encoders
+from email.mime.multipart import MIMEMultipart
 
 
 # Get the directory path where the script is located
@@ -70,7 +71,7 @@ def insert_source_file(database_name, source_file_name, local_file_path, file_si
         conn = sqlite3.connect(database_name)
         cursor = conn.cursor()
 
-        current_datetime = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+        current_datetime = datetime.now().strftime("%y-%m-%d")
 
         cursor.execute('''INSERT OR IGNORE INTO SourceFile 
                             (source_file_name, local_file_path, file_size, status, created_date, updated_date) 
@@ -90,7 +91,7 @@ def insert_processed_file(database_name, local_file_path, source_file_name, stat
         conn = sqlite3.connect(database_name)
         cursor = conn.cursor()
 
-        current_datetime = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+        current_datetime = datetime.now().strftime("%y-%m-%d")
 
         cursor.execute('''INSERT OR IGNORE INTO ProcessedFiles 
                             (local_file_path, source_file_name, status, created_date, updated_date) 
@@ -115,7 +116,6 @@ def update_file_status(database_name, file_name, status):
         conn.close()
     except Exception as e:
         logging.error(f"Error updating SourceFile into database: {e}")
-        raise e
 
 # Function to view database tables
 def view_database(database_name, table_name):
@@ -132,8 +132,9 @@ def view_database(database_name, table_name):
         print(tabulate(data, headers=headers, tablefmt="grid"))
         logging.info("Data fetched from database...")
     else:
-        print(f"No data found in {table_name} table.")
-        logging.error(f"No data found in {table_name} table.")
+        print(f"No data found in {table_name} table.Exiting...")
+        logging.error(f"No data found in {table_name} table.Exiting...")
+        sys.exit()
 
 def print_database(database_name, table_name):
     try:
@@ -144,13 +145,21 @@ def print_database(database_name, table_name):
         logging.error(f"Error printing database {database_name}: {e}")
         raise e
 
-
+def base64_decode(encoded_variable):
+    decoded_variable = base64.b64decode(encoded_variable.encode()).decode()
+    return decoded_variable
+    
 # SSH credentials and server details
-hostname = '192.168.1.62'
-port = 22
-username = 'trellissoft'
-password = 'trellissoft@123'
-remote_path = '/home/trellissoft/temp_files/'
+hostname = base64_decode(os.environ.get('SSH_HOST'))
+username = base64_decode(os.environ.get('SSH_USERNAME'))
+password = base64_decode(os.environ.get('SSH_PASSWORD'))
+port = int(base64_decode(os.environ.get('SSH_PORT', '22')))
+remote_path="/home/trellissoft/temp_files/"
+
+# export SSH_HOST="MTkyLjE2OC4xLjYy" 
+# && export SSH_PORT="MjI=" 
+# && export SSH_USERNAME="dHJlbGxpc3NvZnQ=" 
+# && export SSH_PASSWORD="dHJlbGxpc3NvZnRAMTIz"
 
 # Connect to the remote server
 try:
@@ -163,10 +172,11 @@ except Exception as e:
 
 # Function to download folders from remote server
 def download_folders_from_remote(sftp, remote_path, local_input_folder, database_name):
-    # List files and directories in the remote path
+    # List files and directories in the remote 
     try:
         files = sftp.listdir_attr(remote_path)
     except Exception as e:
+        print("Hello")
         logging.error(f"Error listing files in remote path '{remote_path}': {str(e)}")
         return
     
@@ -174,40 +184,42 @@ def download_folders_from_remote(sftp, remote_path, local_input_folder, database
         remote_item_path = os.path.join(remote_path, item.filename)
         if stat.S_ISDIR(item.st_mode):  # If it's a directory
             download_folder(sftp, remote_item_path, local_input_folder, database_name)
-            logging.info("Folders downloaded successfully from remote server!")
 
-    
+
 def download_file(sftp, remote_file_path, local_directory_path, database_name):
-    # Get the file name
-    file_name = os.path.basename(remote_file_path)
-    if file_name.endswith('.wav'):
-        # Check if the file has already been downloaded today
-        today_date = datetime.now().strftime("%y%m%d")
-        conn = sqlite3.connect(database_name)
-        cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM SourceFile WHERE source_file_name = ? AND created_date LIKE ?", (file_name, f"{today_date}%"))
-        if cursor.fetchone()[0] > 0:
-            # Log that the file has already been downloaded today
-            logging.info(f"File '{file_name}' has already been downloaded today. Skipping...")
-            conn.close()
-            return
-
-        try:
-            # Local file path
-            local_file_path = os.path.join(local_directory_path, file_name)
-            
-            # Download the file
-            sftp.get(remote_file_path, local_file_path)
-            
-            logging.info(f"Downloaded '{file_name}' from remote server to local directory.")
-            
-            # Insert file information into the database
-            insert_source_file(database_name, file_name, local_file_path, os.path.getsize(local_file_path), 'pending')
-        except Exception as e:
-            # Log the error and continue with the next file
-            logging.error(f"Error downloading '{file_name}': {str(e)}")
+    try:
+        # Get the file name
+        file_name = os.path.basename(remote_file_path)
+        if file_name.endswith('.wav'):
+            # Check if the file has already been downloaded today
+            today_date = datetime.now().strftime("%y-%m-%d")
+            conn = sqlite3.connect(database_name)
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM SourceFile WHERE source_file_name = ? AND created_date LIKE ?", (file_name, f"{today_date}%"))
+            count = cursor.fetchone()[0]
+            if count > 0:
+                # Log that the file has already been downloaded today
+                logging.info(f"File '{file_name}' has already been downloaded today. Skipping...")
+                return 0
+            else:
+                # Local file path
+                local_file_path = os.path.join(local_directory_path, file_name)
+                # Download the file
+                sftp.get(remote_file_path, local_file_path)
+                
+                logging.info(f"Downloaded '{file_name}' from remote server to local directory.")
+                
+                # Insert file information into the database
+                insert_source_file(database_name, file_name, local_file_path, os.path.getsize(local_file_path), 'pending')
+                return 1
+                
+    except Exception as e:
+        # Log the error and continue with the next file
+        logging.error(f"Error downloading '{file_name}': {str(e)}")
+    finally:
+        conn.close()  # Close the database connection
         
-        conn.close()
+        
    
 # Function to download a folder from remote server
 def download_folder(sftp, remote_folder_path, local_input_folder, database_name):
@@ -223,12 +235,17 @@ def download_folder(sftp, remote_folder_path, local_input_folder, database_name)
         
         # List files and directories in the remote folder
         files = sftp.listdir_attr(remote_folder_path)
-        
+        count=0
         for item in files:
             remote_item_path = os.path.join(remote_folder_path, item.filename)
             if not stat.S_ISDIR(item.st_mode):  # If it's not a directory
-                download_file(sftp, remote_item_path, local_directory_path, database_name)
-
+                x=download_file(sftp, remote_item_path, local_directory_path, database_name)
+                count+=x
+        if count==0:
+            logging.error("All files have been downloaded today! Exiting...")
+            print("All files have been downloaded today! Exiting...")
+            sys.exit()        
+                
 # Create input folder
 input_folder = 'input'
 os.makedirs(input_folder, exist_ok=True)
@@ -261,7 +278,7 @@ def convert_wav_to_mp3(input_folder, processing_folder, completed_folder, failed
 
                 logging.info(f"Processing WAV file: {file_name}")
                 
-                current_datetime=datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+                current_datetime=datetime.now().strftime("%y-%m-%d")
                 
                 # Load the wav file
                 wav_file_path = os.path.join(root, file_name)
@@ -423,18 +440,6 @@ for root, dirs, files in os.walk(processing_folder, topdown=False):
 
 logging.info("Processing folder is now empty.")
 
-
-def move_files_to_deleted_after_delay(completed_folder, deleted_folder, delay_hours=24):
-    print(f"Waiting for {delay_hours} seconds before moving files to 'deleted' folder...")
-    time.sleep(delay_hours * 3600)  # Convert hours to seconds
-    
-    for root, dirs, files in os.walk(completed_folder):
-        for file in files:
-            file_path = os.path.join(root, file)
-            destination_folder = root.replace(completed_folder, deleted_folder)
-            os.makedirs(destination_folder, exist_ok=True)
-            os.rename(file_path, os.path.join(destination_folder, file))
-            print(f"Moved '{file}' to 'deleted' folder.")
                 
 
              
@@ -542,11 +547,16 @@ def main():
     database_name = 'wav_file_manager.db'
 
     # Email details
-    sender_email = 'sakshibhati1407@gmail.com'
-    sender_password = 'hkcb saoy ymfs wimj'
-    receiver_email = 'pjignesh@trellissoft.ai'
-    cc_email = 'bsakshi@trellissoft.ai'
+    sender_email = base64_decode(os.environ.get('SENDER_EMAIL'))
+    sender_password = base64_decode(os.environ.get('SENDER_PASSWORD'))
+    receiver_email = base64_decode(os.environ.get('RECIEVER_EMAIL'))
+    cc_email = base64_decode(os.environ.get('CC_EMAIL'))
     subject = 'Daily Status Report'
+    
+    # && export SENDER_EMAIL="c2Frc2hpYmhhdGkxNDA3QGdtYWlsLmNvbQ==" 
+    # && export SENDER_PASSWORD="aGtjYiBzYW95IHltZnMgd2ltag==" 
+    # && export RECIEVER_EMAIL="cGppZ25lc2hAdHJlbGxpc3NvZnQuYWk=" 
+    # && export CC_EMAIL="YnNha3NoaUB0cmVsbGlzc29mdC5haQ=="
 
     # Create reports folder if it doesn't exist
     report_folder = 'reports'
@@ -576,5 +586,3 @@ def main():
     print("Email sent successfully with the source file report and log file.")
 
 main()
-
-move_files_to_deleted_after_delay(completed_folder, deleted_folder)
